@@ -1,0 +1,194 @@
+---
+title: "Datathon-AirBnb"
+author: "Jiying Zou"
+date: "September 9, 2017"
+output: html_document
+---
+
+```{r, include=FALSE}
+library(car)
+library(ggplot2)
+library(dplyr)
+```
+
+
+#Read Data
+
+```{r}
+list <- read.csv("~/Documents/datathon/listings.csv")
+HR <- read.csv("~/Documents/datathon/hit_ratio.csv") 
+volatility <- read.csv("~/Documents/datathon/hit_vol.csv")
+facility_oak <- read.csv("~/Documents/datathon/out_oakland_out_facility.csv", row.names = 1)
+facility_port <- read.csv("~/Documents/datathon/out_portland_out_facility.csv", row.names = 1)
+facility_sc <- read.csv("~/Documents/datathon/out_san_cruze_out_facility.csv", row.names = 1)
+facility_sd <- read.csv("~/Documents/datathon/out_san_diego_out_facility.csv", row.names = 1)
+facility_sf <- read.csv("~/Documents/datathon/out_san_francisco_out_facility.csv", row.names = 1)
+facility_seattle <- read.csv("~/Documents/datathon/out_seattle_out_facility.csv", row.names = 1)
+```
+
+Row bind all:
+```{r}
+facility_all <- rbind(facility_oak, facility_port, facility_sc, facility_sd, facility_seattle, facility_sf)
+```
+
+
+
+
+
+#1) Format the dataset on vars of interest
+
+```{r}
+#Format price and amenities cols
+
+list$price <- as.numeric(gsub('[$,]','', list$price))
+list$amenities <- gsub('[{} "]','', list$amenities)
+
+```
+
+#2) Feature engineer indicators for what each listing offers
+
+```{r}
+#Extract amenities
+
+list$internet <- grepl('[Ii]nternet', list$amenities) - 0
+list$wifi <- grepl('[Ww]ireless[Ii]nternet', list$amenities) - 0
+list$AC <- grepl('[Aa]ir[Cc]onditioning', list$amenities) - 0
+list$kitchen <- grepl('[Kk]itchen', list$amenities) - 0
+list$free_parking <- grepl('[Ff]ree[Pp]arking', list$amenities) - 0
+list$smoking_ok <- grepl('[Ss]moking[Aa]llow', list$amenities) - 0
+list$breakfast <- grepl('[Bb]reakfast', list$amenities) - 0
+list$heating <- grepl('[Hh]eating', list$amenities) - 0
+list$fam_friendly <- grepl('([Ff]amily.*[Ff]riendly|[Cc]rib)', list$amenities) - 0
+list$laundry <- grepl('[Ww]asher', list$amenities) - 0
+list$essentials <- grepl('[Ee]ssential', list$amenities) - 0
+list$workspace <- grepl('[Ww]orkspace', list$amenities) - 0
+list$hot_water <- grepl('[Hh]ot[Ww]ater', list$amenities) - 0
+list$bedding <- grepl('([Ll]inen|[Pp]illow|[Bb]lanket)', list$amenities) - 0
+list$appliances <- grepl('([Mm]icrowave|[Cc]offeemaker|[Rr]efrigerator|[Dd]ishwasher]|[Oo]ven|[Ss]tove|[Gg]rill)', list$amenities) - 0
+list$utensils <- grepl('([Dd]innerware|[Dd]ishes|[Ss]ilverware)', list$amenities) - 0
+list$backyard <- grepl('(BBQ|[Pp]atio|[Gg]arden|[Bb]ackyard)', list$amenities) - 0
+list$long_stay <- grepl('[Ll]ong[Tt]erm', list$amenities) - 0
+list$is_house <- grepl('^[Hh]ouse$', list$property_type) - 0
+```
+
+#3) EDA Visualization
+
+```{r}
+#Which feature engineered variables 
+(abs(cor(list[,31:48])) > 0.7) - 0
+```
+Decision: drop internet in favor of wifi, drop hot_water and 
+Join Response Variable Hit Ratio
+
+##For inside amenities
+
+```{r}
+in_props <- colSums(list_hr_vol_fac[,which(names(list_hr_vol_fac) == "internet"):which(names(list_hr_vol_fac) == "is_house")])/nrow(list_hr_vol_fac)
+
+in_props <- as.data.frame(in_props)
+
+in_props$amenity <- rownames(in_props)
+colnames(in_props)[1] <- "proportion"
+```
+
+```{r}
+in_props %>% 
+  ggplot(aes(x =amenity, y = proportion)) +
+  geom_point() +
+  geom_hline(yintercept = 0.05, color = "red", linetype = "dashed") +
+  geom_hline(yintercept = 0.95, color = "red", linetype = "dashed") +
+  labs(title = "Proportion of Listings with Amenities", x = "Amenity", y = "Proportion") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5)) +
+  scale_x_discrete(labels = c("AC", "Appliances", "Outdoor Area", "Bedding", "Breakfast", "Essentials", "Family Friendly", "Free Parking", "Heating", "Hot Water", "Internet", "Is House", "Kitchen", "Laundry", "Long Stay OK", "Smoking OK", "Utensils", "Wifi", "Workspace"))
+```
+
+##For outside facilities
+
+```{r}
+out_props <- colSums(list_hr_vol_fac[,which(names(list_hr_vol_fac) == "restaurant"):ncol(list_hr_vol_fac)], na.rm = T)/nrow(list_hr_vol_fac)
+
+out_props <- as.data.frame(out_props, na.rm = T)
+
+out_props$facility <- rownames(out_props)
+colnames(out_props)[1] <- "proportion"
+```
+
+```{r}
+out_props[1:33,] %>% 
+  ggplot(aes(x = facility, y = proportion)) +
+  geom_point() +
+  geom_hline(yintercept = 0.05, color = "red", linetype = "dashed") +
+  geom_hline(yintercept = 0.95, color = "red", linetype = "dashed") +
+  labs(title = "Proportion of Listings with Nearby Facilities", x = "Facility", y = "Proportion") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5)) +
+  scale_x_discrete(labels = c("Art Gallery", "ATM", "Bakery", "Bar", "Bowling", "Cafe", "Car Repair", "Car Wash", "Casino", "Clothing Store", "Convenience Store", "Establishment", "Finance", "Food", "Gas Station", "Grocery/Supermarket", "Gym", "Health", "Home Goods", "Liquor Store", "Lodging", "Meal Delivery", "Meal Takeaway", "Movie Theater", "Nightclub", "Park", "POI", "Restaurant", "School", "Mall", "Spa", "Other Store", "Travel Agency"))
+```
+
+```{r}
+out_props[34:67,] %>% 
+  ggplot(aes(x = facility, y = proportion)) +
+  geom_point() +
+  geom_hline(yintercept = 0.05, color = "red", linetype = "dashed") +
+  geom_hline(yintercept = 0.95, color = "red", linetype = "dashed") +
+  labs(title = "Proportion of Listings with Nearby Facilities", x = "Facility", y = "Proportion") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5)) +
+  scale_x_discrete(labels = c("Accounting", "Aquarium", "Bank", "Beauty Salon", "Bike Shop", "Bookstore", "Church", "Courthouse", "Dentist", "Department Store", "Doctor", "Electronics Store", "Funeral Home", "Furniture Store", "General Contractor", "Hair Salon", "Hardware Store", "Jewelery Store", "Laundry", "Lawyer", "Library", "Local Gov't Office", "Museum", "Painter", "Parking", "Pet Store","Pharmacy","Place of Worship", "Plumber", "Political", "Real Estate Agency", "Shoe Store", "Storage", "University"))
+```
+
+```{r}
+out_props[68:101,] %>% 
+  ggplot(aes(x = facility, y = proportion)) +
+  geom_point() +
+  geom_hline(yintercept = 0.05, color = "red", linetype = "dashed") +
+  geom_hline(yintercept = 0.95, color = "red", linetype = "dashed") +
+  labs(title = "Proportion of Listings with Nearby Facilities", x = "Facility", y = "Proportion") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5)) +
+  scale_x_discrete(labels = c("Airport", "Amusement Park", "Bus Station", "Campground", "Car Dealer", "Car Rental", "Cemetary", "City Hall", "Electrician", "Embassy", "Florist", "Hospital", "Insurance Agency", "Light Rail Station", "Locksmith", "Movie Rental", "Moving Company", "Natural Feature", "Neighborhood", "Physiotherapist", "Police", "Post Office", "Premise", "Roofing Contractor", "RV Parking", "Stadium", "Subpremise", "Subway Station", "Synagogue", "Taxi Stand", "Train Station", "Transit Station", "Vet", "Zoo"))
+```
+
+#4) Add on y-variable hit ratio, volatility, oakland facilities data
+```{r}
+#Add hit rate
+list_hr <- merge(list, HR)
+list_hr$hit_rate <- as.character(list_hr$hit_rate)
+
+#Add volatility
+names(volatility)[1] <- "id"
+list_hr_vol <- merge(list_hr, volatility, by = "id")
+names(list_hr_vol)[which(names(list_hr_vol) == "hit_rate.x")] <- "hit_rate"
+list_hr_vol <- list_hr_vol[,-which(names(list_hr_vol) == "hit_rate.y")]
+
+#Add facilities
+list_hr_vol_fac <- merge(list_hr_vol, facility_all, by = "id", all.y = T)
+```
+
+
+#5) Variable selection
+
+Remove cols of amenities and facilities where too little or too many listings have them
+
+```{r}
+amenities_to_remove <- in_props$amenity[which(in_props$proportion < 0.05 | in_props$proportion > 0.95)]
+facilities_to_remove <- out_props$facility[which(out_props$proportion < 0.05 | out_props$proportion > 0.95)]
+```
+
+Remove cols
+```{r}
+remove_indexes <- which(colnames(list_hr_vol_fac) %in% c(amenities_to_remove, facilities_to_remove))
+list_removed_useless <- list_hr_vol_fac[, -remove_indexes]
+```
+
+```{r}
+#Export
+
+out <- write.csv(x = list_hr_vol_fac, file = "~/Documents/datathon/listing_formatted_hr_vol_fac.csv")
+out <- write.csv(x = list_removed_useless, file = "~/Documents/datathon/listing_formatted_hr_vol_fac_removed.csv")
+```
+
+$$Booking \space Ratio \space = \space \# \space Times \space Booked \space / \space \# \space Total \space Times \space Listing \space Available$$
+
+
